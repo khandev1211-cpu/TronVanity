@@ -1,8 +1,5 @@
 """
-Background worker: runs ProVanity repeatedly (matching only the suffix,
-since that's all ProVanity's generate-tron supports natively), verifies
-the prefix in Python, and keeps going until both match or the job is
-cancelled / times out / hits too many consecutive failures.
+Background worker: runs TRON Profanity / ProVanity with simultaneous prefix + suffix support.
 """
 
 import time
@@ -45,28 +42,26 @@ def run_job(job_id: str, prefix: str, suffix: str, case_insensitive: bool):
             return
 
         try:
-            result = provanity.run_once(suffix=suffix)
+            result = provanity.run_once(prefix=prefix, suffix=suffix)
             consecutive_failures = 0
         except provanity.ProVanityError as e:
             consecutive_failures += 1
-            logger.error(f"Job {job_id}: ProVanity run failed ({consecutive_failures}/"
+            logger.error(f"Job {job_id}: GPU run failed ({consecutive_failures}/"
                          f"{MAX_CONSECUTIVE_FAILURES}): {e}")
             if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                 job_store.update(
                     job_id,
                     status=JobStatusEnum.ERROR,
-                    error=f"ProVanity failed {MAX_CONSECUTIVE_FAILURES} times in a row: {e}",
+                    error=f"GPU Engine failed {MAX_CONSECUTIVE_FAILURES} times in a row: {e}",
                     finished_at=datetime.now(timezone.utc).isoformat(),
                     elapsed_seconds=time.time() - start,
                 )
                 return
-            time.sleep(min(2 ** consecutive_failures, 30))  # exponential backoff
+            time.sleep(min(2 ** consecutive_failures, 30))
             continue
 
         total_attempts += result.attempts
         elapsed = time.time() - start
-
-        job_store.update(job_id, attempts_total=total_attempts, elapsed_seconds=elapsed)
 
         prefix_ok = provanity.check_prefix(result.address, prefix, case_insensitive)
         suffix_ok = provanity.check_suffix(result.address, suffix, case_insensitive)
@@ -83,12 +78,8 @@ def run_job(job_id: str, prefix: str, suffix: str, case_insensitive: bool):
                 },
             )
             logger.info(f"Job {job_id} DONE: address={result.address} "
-                        f"(total_attempts={total_attempts:,}, elapsed={elapsed:.1f}s)")
+                        f"(elapsed={elapsed:.1f}s)")
             return
-        else:
-            # Suffix matched (ProVanity guarantees this) but prefix didn't --
-            # this is expected and normal, just keep looping.
-            logger.debug(f"Job {job_id}: suffix ok, prefix mismatch on {result.address}, retrying")
 
 
 def start_job_thread(job_id: str, prefix: str, suffix: str, case_insensitive: bool) -> threading.Thread:

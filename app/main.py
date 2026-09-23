@@ -17,6 +17,7 @@ from fastapi.exceptions import RequestValidationError
 from app.core.config import settings
 from app.core.logging_config import logger
 from app.api.routes import router
+from app.services.redis_worker import start_redis_worker_thread
 
 app = FastAPI(
     title="TRON Vanity Address Generator API",
@@ -55,10 +56,13 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 async def on_startup():
     logger.info("=" * 60)
     logger.info("TRON Vanity Address Generator API starting up")
-    logger.info(f"ProVanity binary: {settings.provanity_binary}")
+    logger.info(f"Profanity/ProVanity binary: {settings.provanity_binary}")
     logger.info(f"Devices: {settings.devices}")
     logger.info(f"Listening on {settings.host}:{settings.port}")
     logger.info(f"Max job runtime: {settings.max_runtime_seconds}s")
+    if settings.redis_host:
+        logger.info(f"VPS Redis Queue Worker Target: {settings.redis_host}:{settings.redis_port}")
+        start_redis_worker_thread()
     logger.info("=" * 60)
 
 

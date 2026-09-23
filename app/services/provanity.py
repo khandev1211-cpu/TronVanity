@@ -1,10 +1,11 @@
 """
-Wraps the ProVanity binary as a subprocess, with proper error handling
-for every way it can fail: missing binary, timeout, crash, unparseable
-output, or a GPU/driver failure mid-run.
+Wraps TRON Profanity / ProVanity GPU binaries as subprocesses.
+Supports simultaneous 1-pass Prefix + Suffix matching via C++ OpenCL Profanity.
 """
 
+import os
 import re
+import time
 import subprocess
 from dataclasses import dataclass
 from typing import Optional
@@ -14,7 +15,7 @@ from app.core.logging_config import logger
 
 
 class ProVanityError(Exception):
-    """Raised when ProVanity fails to run or produces unusable output."""
+    """Raised when GPU engine fails to run or produces unusable output."""
     pass
 
 
@@ -22,27 +23,88 @@ class ProVanityError(Exception):
 class ProVanityResult:
     address: str
     private_key: str
-    offset: Optional[str]
-    attempts: int
+    offset: Optional[str] = None
+    attempts: int = 0
 
 
-_ADDRESS_RE = re.compile(r"address:\s*(\S+)")
-_PRIVKEY_RE = re.compile(r"private key:\s*(\S+)")
-_OFFSET_RE = re.compile(r"offset:\s*(\S+)")
-_ATTEMPTS_RE = re.compile(r"attempts:\s*(\d+)")
+_ADDRESS_RE = re.compile(r"address:\s*(\S+)", re.IGNORECASE)
+_PRIVKEY_RE = re.compile(r"private key:\s*(\S+)", re.IGNORECASE)
 
 
-def run_once(suffix: str = "", devices: Optional[str] = None) -> ProVanityResult:
+def run_profanity_simultaneous(prefix: str = "", suffix: str = "") -> ProVanityResult:
     """
-    Runs ProVanity exactly once with the given suffix pattern (prefix is
-    NOT supported natively by `generate-tron` — that's verified separately
-    by the caller). Raises ProVanityError on any failure.
+    Executes C++ OpenCL Profanity Engine with simultaneous Prefix and Suffix matching.
     """
+    base58_pad = "123456789ABCDEFGHJKLMNPQRSTUV"
+    pad_needed = 34 - 1 - len(prefix) - len(suffix)
+    dummy_fill = base58_pad[:max(0, pad_needed)]
+    target_address = f"T{prefix}{dummy_fill}{suffix}"
+
+    # Use simple relative file name to avoid path spaces issues in C++ executable
+    result_file = f"res_{int(time.time())}.txt"
+    if os.path.exists(result_file):
+        try: os.remove(result_file)
+        except: pass
+
+    cmd = [
+        settings.provanity_binary,
+        "--matching", target_address,
+        "--prefix-count", str(len(prefix)),
+        "--suffix-count", str(len(suffix)),
+        "--quit-count", "1",
+        "--skip", str(settings.gpu_skip),
+        "--output", result_file
+    ]
+
+    logger.debug(f"Executing GPU Command: {' '.join(cmd)}")
+
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True
+        )
+
+        start_t = time.time()
+        while time.time() - start_t < settings.provanity_timeout_seconds:
+            if os.path.exists(result_file) and os.path.getsize(result_file) > 10:
+                with open(result_file, "r") as f:
+                    content = f.read().strip()
+                if "," in content:
+                    pk, addr = content.split(",", 1)
+                    proc.terminate()
+                    try: os.remove(result_file)
+                    except: pass
+                    return ProVanityResult(address=addr.strip(), private_key=pk.strip())
+
+            if proc.poll() is not None and not os.path.exists(result_file):
+                out, _ = proc.communicate()
+                raise ProVanityError(f"GPU process exited prematurely. Output: {out[-500:]!r}")
+
+            time.sleep(0.5)
+
+        proc.terminate()
+        raise ProVanityError(f"GPU process timed out after {settings.provanity_timeout_seconds}s")
+
+    except Exception as e:
+        raise ProVanityError(f"GPU Execution Error: {e}")
+
+
+def run_once(prefix: str = "", suffix: str = "", devices: Optional[str] = None) -> ProVanityResult:
+    """
+    Unified entry point. Automatically uses simultaneous 1-pass Profanity if available,
+    otherwise falls back to ProVanity.
+    """
+    binary_name = os.path.basename(settings.provanity_binary).lower()
+
+    if "profanity" in binary_name and "provanity" not in binary_name:
+        return run_profanity_simultaneous(prefix, suffix)
+
+    # Fallback for ProVanity
     cmd = [settings.provanity_binary, "generate-tron", "--devices", devices or settings.devices]
     if suffix:
         cmd += ["--pattern", f"suffix:{suffix}"]
-
-    logger.debug(f"Running: {' '.join(cmd)}")
 
     try:
         proc = subprocess.run(
@@ -51,46 +113,23 @@ def run_once(suffix: str = "", devices: Optional[str] = None) -> ProVanityResult
             text=True,
             timeout=settings.provanity_timeout_seconds,
         )
-    except subprocess.TimeoutExpired as e:
-        raise ProVanityError(
-            f"ProVanity did not finish within {settings.provanity_timeout_seconds}s "
-            f"(pattern may be too long, or GPU is stuck)"
-        ) from e
-    except FileNotFoundError as e:
-        raise ProVanityError(f"ProVanity binary not found at '{settings.provanity_binary}'") from e
-    except PermissionError as e:
-        raise ProVanityError(f"ProVanity binary at '{settings.provanity_binary}' is not executable") from e
-    except OSError as e:
-        raise ProVanityError(f"OS error while launching ProVanity: {e}") from e
+        output = (proc.stdout or "") + (proc.stderr or "")
 
-    output = (proc.stdout or "") + (proc.stderr or "")
+        address_match = _ADDRESS_RE.search(output)
+        privkey_match = _PRIVKEY_RE.search(output)
 
-    if proc.returncode != 0:
-        raise ProVanityError(
-            f"ProVanity exited with code {proc.returncode}. Output tail: {output[-500:]!r}"
-        )
-
-    address_match = _ADDRESS_RE.search(output)
-    privkey_match = _PRIVKEY_RE.search(output)
-    offset_match = _OFFSET_RE.search(output)
-    attempts_match = _ATTEMPTS_RE.search(output)
-
-    if not address_match or not privkey_match:
-        raise ProVanityError(
-            f"Could not parse ProVanity output (address/private key missing). "
-            f"Output tail: {output[-500:]!r}"
-        )
-
-    return ProVanityResult(
-        address=address_match.group(1),
-        private_key=privkey_match.group(1),
-        offset=offset_match.group(1) if offset_match else None,
-        attempts=int(attempts_match.group(1)) if attempts_match else 0,
-    )
+        if address_match and privkey_match:
+            return ProVanityResult(
+                address=address_match.group(1),
+                private_key=privkey_match.group(1)
+            )
+        raise ProVanityError("Could not parse output")
+    except Exception as e:
+        # Final fallback to simultaneous Profanity if ProVanity failed
+        return run_profanity_simultaneous(prefix, suffix)
 
 
 def check_prefix(address: str, prefix: str, case_insensitive: bool) -> bool:
-    """TRON addresses always start with 'T' — the prefix applies after that."""
     if not prefix:
         return True
     if len(address) <= len(prefix):

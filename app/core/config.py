@@ -1,7 +1,6 @@
 """
-Configuration loader and validator.
-Reads all settings from .env and fails fast with clear error messages
-if anything required is missing or invalid.
+Configuration loader and validator for TronVanity GPU Node.
+Reads all settings from .env and supports both REST API & Redis connection to main VPS.
 """
 
 import os
@@ -21,9 +20,23 @@ class ConfigError(Exception):
 
 class Settings:
     def __init__(self):
-        self.api_key: str = self._require_str("VANITY_API_KEY")
-        self.provanity_binary: str = os.environ.get("PROVANITY_BINARY", "/workspace/provanity")
+        # API Key for REST API
+        self.api_key: str = os.environ.get("VANITY_API_KEY", "default_secret_key_change_me_12345")
+
+        # Remote/Local VPS Redis Connection Parameters
+        self.redis_host: str = os.environ.get("REDIS_HOST", "localhost")
+        self.redis_port: int = self._get_int("REDIS_PORT", 6379)
+        self.redis_password: str = os.environ.get("REDIS_PASSWORD", "")
+
+        # Binary Path (Supports profanity.x64 / profanity.exe / provanity)
+        self.provanity_binary: str = (
+            os.environ.get("PROFANITY_BINARY") or
+            os.environ.get("PROVANITY_BINARY") or
+            str(BASE_DIR / "profanity.x64")
+        )
         self.devices: str = os.environ.get("PROVANITY_DEVICES", "all")
+        self.gpu_skip: str = os.environ.get("GPU_SKIP_DEVICE", "1" if os.name == "nt" else "0")
+
         self.host: str = os.environ.get("HOST", "0.0.0.0")
         self.port: int = self._get_int("PORT", 8000)
         self.max_runtime_seconds: int = self._get_int("MAX_RUNTIME_SECONDS", 60 * 60 * 24 * 3)
@@ -38,15 +51,6 @@ class Settings:
 
         self._validate()
 
-    def _require_str(self, key: str) -> str:
-        value = os.environ.get(key)
-        if not value or value.strip() == "" or "REPLACE_WITH" in value:
-            raise ConfigError(
-                f"Required environment variable '{key}' is not set (or still has its "
-                f"placeholder value). Copy .env.example to .env and fill it in."
-            )
-        return value.strip()
-
     def _get_int(self, key: str, default: int) -> int:
         raw = os.environ.get(key)
         if raw is None:
@@ -57,21 +61,6 @@ class Settings:
             raise ConfigError(f"Environment variable '{key}' must be an integer, got: {raw!r}")
 
     def _validate(self):
-        if len(self.api_key) < 16:
-            raise ConfigError(
-                "VANITY_API_KEY looks too short to be secure (< 16 chars). "
-                "Generate one with: python3 -c \"import secrets; print(secrets.token_hex(32))\""
-            )
-        if not os.path.exists(self.provanity_binary):
-            raise ConfigError(
-                f"PROVANITY_BINARY points to '{self.provanity_binary}' but that file doesn't exist. "
-                f"Check the path or download ProVanity first."
-            )
-        if not os.access(self.provanity_binary, os.X_OK):
-            raise ConfigError(
-                f"PROVANITY_BINARY at '{self.provanity_binary}' exists but is not executable. "
-                f"Run: chmod +x {self.provanity_binary}"
-            )
         if self.port < 1 or self.port > 65535:
             raise ConfigError(f"PORT must be between 1 and 65535, got: {self.port}")
         if self.max_runtime_seconds < 1:
@@ -79,7 +68,7 @@ class Settings:
 
 
 def load_settings() -> Settings:
-    """Load and validate settings, exiting with a clear message on failure."""
+    """Load settings smoothly."""
     try:
         return Settings()
     except ConfigError as e:
