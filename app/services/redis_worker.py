@@ -34,7 +34,7 @@ def start_redis_worker_thread():
                     retry_on_timeout=True
                 )
                 r.ping()
-                logger.info(f"✅ Connected to VPS Redis ({settings.redis_host}). Listening to 'gpu_queue'...")
+                logger.info(f"[OK] Connected to VPS Redis ({settings.redis_host}). Listening to 'gpu_queue'...")
 
                 while True:
                     task_data = r.brpop("gpu_queue", timeout=10)
@@ -43,7 +43,7 @@ def start_redis_worker_thread():
 
                     task = json.loads(task_data[1])
                     pattern = task.get('pattern', '')
-                    logger.info(f"📥 Received task from VPS Redis: {pattern}")
+                    logger.info(f"[TASK] Received task from VPS Redis: {pattern}")
 
                     r.set(f"mine_status:{pattern}", "mining")
                     r.set(f"mine_mode:{pattern}", f"Vast.ai GPU Node ({settings.redis_host})")
@@ -68,10 +68,10 @@ def start_redis_worker_thread():
                         }
                         r.set(f"mine_result:{pattern}", json.dumps(result_payload))
                         r.set(f"mine_status:{pattern}", "completed")
-                        logger.info(f"✅ SUCCESS: Sync'd match to VPS Redis -> {res.address}")
+                        logger.info(f"[SUCCESS] Sync'd match to VPS Redis -> {res.address}")
                     else:
                         r.set(f"mine_status:{pattern}", "error")
-                        logger.error(f"❌ Failed to find match for {pattern}")
+                        logger.error(f"[ERROR] Failed to find match for {pattern}")
 
             except Exception as e:
                 logger.error(f"Redis Worker Connection Error: {e}. Retrying in 5s...")
