@@ -2,13 +2,23 @@
 # Automatically builds native Linux 64-bit OpenCL C++ binary profanity.x64
 set -e
 
-echo "[*] Installing OpenCL & libcurl development libraries if missing..."
+echo "[*] Installing OpenCL & libcurl development libraries..."
 apt update -qq && apt install -y -qq build-essential ocl-icd-opencl-dev opencl-headers libcurl4-openssl-dev > /dev/null 2>&1 || true
 
-echo "[*] Compiling native Linux OpenCL C++ binary inside src/..."
+echo "[*] Compiling native Linux OpenCL C++ binary..."
 cd "$(dirname "$0")/src"
-make clean > /dev/null 2>&1 || true
-make
+
+# Remove any old object files
+rm -f *.o profanity.x64 ../profanity.x64
+
+# Force compile with explicit -lOpenCL and -lcurl
+g++ -c -std=c++11 -Wall -mmmx -O2 -mcmodel=large Dispatcher.cpp -o Dispatcher.o
+g++ -c -std=c++11 -Wall -mmmx -O2 -mcmodel=large Mode.cpp -o Mode.o
+g++ -c -std=c++11 -Wall -mmmx -O2 -mcmodel=large precomp.cpp -o precomp.o
+g++ -c -std=c++11 -Wall -mmmx -O2 -mcmodel=large profanity.cpp -o profanity.o
+g++ -c -std=c++11 -Wall -mmmx -O2 -mcmodel=large SpeedSample.cpp -o SpeedSample.o
+
+g++ Dispatcher.o Mode.o precomp.o profanity.o SpeedSample.o -s -lOpenCL -lcurl -mcmodel=large -o profanity.x64
 
 if [ -f profanity.x64 ]; then
     mv profanity.x64 ../profanity.x64
