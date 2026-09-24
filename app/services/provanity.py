@@ -1,5 +1,5 @@
 """
-Wraps TRON Profanity / ProVanity GPU binaries as subprocesses.
+Wraps TRON Profanity GPU binaries as subprocesses.
 Supports simultaneous 1-pass Prefix + Suffix matching via C++ OpenCL Profanity.
 """
 
@@ -34,13 +34,13 @@ _PRIVKEY_RE = re.compile(r"private key:\s*(\S+)", re.IGNORECASE)
 def run_profanity_simultaneous(prefix: str = "", suffix: str = "") -> ProVanityResult:
     """
     Executes C++ OpenCL Profanity Engine with simultaneous Prefix and Suffix matching.
+    Includes --device 0 parameter to select primary RTX GPU and prevent OpenCL -33 context error.
     """
     base58_pad = "123456789ABCDEFGHJKLMNPQRSTUV"
     pad_needed = 34 - 1 - len(prefix) - len(suffix)
     dummy_fill = base58_pad[:max(0, pad_needed)]
     target_address = f"T{prefix}{dummy_fill}{suffix}"
 
-    # Use simple relative file name to avoid path spaces issues in C++ executable
     result_file = f"res_{int(time.time())}.txt"
     if os.path.exists(result_file):
         try: os.remove(result_file)
@@ -52,7 +52,7 @@ def run_profanity_simultaneous(prefix: str = "", suffix: str = "") -> ProVanityR
         "--prefix-count", str(len(prefix)),
         "--suffix-count", str(len(suffix)),
         "--quit-count", "1",
-        "--skip", str(settings.gpu_skip),
+        "--device", "0",
         "--output", result_file
     ]
 
@@ -92,41 +92,7 @@ def run_profanity_simultaneous(prefix: str = "", suffix: str = "") -> ProVanityR
 
 
 def run_once(prefix: str = "", suffix: str = "", devices: Optional[str] = None) -> ProVanityResult:
-    """
-    Unified entry point. Automatically uses simultaneous 1-pass Profanity if available,
-    otherwise falls back to ProVanity.
-    """
-    binary_name = os.path.basename(settings.provanity_binary).lower()
-
-    if "profanity" in binary_name and "provanity" not in binary_name:
-        return run_profanity_simultaneous(prefix, suffix)
-
-    # Fallback for ProVanity
-    cmd = [settings.provanity_binary, "generate-tron", "--devices", devices or settings.devices]
-    if suffix:
-        cmd += ["--pattern", f"suffix:{suffix}"]
-
-    try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=settings.provanity_timeout_seconds,
-        )
-        output = (proc.stdout or "") + (proc.stderr or "")
-
-        address_match = _ADDRESS_RE.search(output)
-        privkey_match = _PRIVKEY_RE.search(output)
-
-        if address_match and privkey_match:
-            return ProVanityResult(
-                address=address_match.group(1),
-                private_key=privkey_match.group(1)
-            )
-        raise ProVanityError("Could not parse output")
-    except Exception as e:
-        # Final fallback to simultaneous Profanity if ProVanity failed
-        return run_profanity_simultaneous(prefix, suffix)
+    return run_profanity_simultaneous(prefix, suffix)
 
 
 def check_prefix(address: str, prefix: str, case_insensitive: bool) -> bool:
