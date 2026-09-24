@@ -9,7 +9,7 @@ ifeq ($(UNAME_S),Darwin)
 	LDFLAGS=-framework OpenCL -lcurl
 	CFLAGS=-c -std=c++11 -Wall -mmmx -O2
 else
-	LDFLAGS=-s -lOpenCL -mcmodel=large
+	LDFLAGS=-s -lOpenCL -lcurl -mcmodel=large
 	CFLAGS=-c -std=c++11 -Wall -mmmx -O2 -mcmodel=large 
 endif
 
@@ -22,5 +22,4 @@ $(EXECUTABLE): $(OBJECTS)
 	$(CC) $(CFLAGS) $(CDEFINES) $< -o $@
 
 clean:
-	rm -rf *.o
-
+	rm -rf *.o $(EXECUTABLE)

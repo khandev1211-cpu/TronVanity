@@ -2,8 +2,8 @@
 # Automatically builds native Linux 64-bit OpenCL C++ binary profanity.x64
 set -e
 
-echo "[*] Installing OpenCL development libraries if missing..."
-apt update -qq && apt install -y -qq build-essential ocl-icd-opencl-dev opencl-headers > /dev/null 2>&1 || true
+echo "[*] Installing OpenCL & libcurl development libraries if missing..."
+apt update -qq && apt install -y -qq build-essential ocl-icd-opencl-dev opencl-headers libcurl4-openssl-dev > /dev/null 2>&1 || true
 
 echo "[*] Compiling native Linux OpenCL C++ binary inside src/..."
 cd "$(dirname "$0")/src"
