@@ -175,7 +175,7 @@ int main(int argc, char **argv)
 		bool bHelp = false;
 		std::string matchingInput = "";
 		std::string outputFile = "";
-		std::string postUrl = "http://127.0.0.1:7002/api/address";
+		std::string postUrl = "";
 		std::vector<size_t> vDeviceSkipIndex;
 		size_t worksizeLocal = 64;
 		size_t worksizeMax = 0;
