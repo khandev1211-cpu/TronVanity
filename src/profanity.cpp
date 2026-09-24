@@ -128,125 +128,79 @@ std::vector<std::string> getBinaries(cl_program &clProgram)
 	return vReturn;
 }
 
-void printResult(cl_int result)
+bool printResult(const cl_int err)
 {
-	if (result == CL_SUCCESS)
-	{
-		std::cout << "OK" << std::endl;
-	}
-	else
-	{
-		std::cout << "    error: " << result << std::endl;
-	}
+	std::cout << ((err != CL_SUCCESS) ? toString(err) : "Done") << std::endl;
+	return err != CL_SUCCESS;
 }
 
-bool printResult(cl_program program, cl_int result)
+cl_ulong getUniqueDeviceIdentifier(cl_device_id &d)
 {
-	if (result == CL_SUCCESS)
+	cl_ulong id = 0;
+
+	// Query bus ID and slot ID for NVIDIA GPUs
+	const auto busId = clGetWrapper<cl_uint>(clGetDeviceInfo, d, CL_DEVICE_PCI_BUS_ID_NV);
+	const auto slotId = clGetWrapper<cl_uint>(clGetDeviceInfo, d, CL_DEVICE_PCI_SLOT_ID_NV);
+
+	if (busId != 0 || slotId != 0)
 	{
-		std::cout << "OK" << std::endl;
-		return false;
+		id = (static_cast<cl_ulong>(busId) << 32) | slotId;
 	}
-	else
+
+	// Fallback to name hash if PCI topology is not present
+	if (id == 0)
 	{
-		std::cout << "    error: " << result << std::endl;
-
-		size_t sizeBuildLog = 0;
-		clGetProgramBuildInfo(program, NULL, CL_PROGRAM_BUILD_LOG, 0, NULL, &sizeBuildLog);
-
-		char *szBuildLog = new char[sizeBuildLog + 1];
-
-		clGetProgramBuildInfo(program, NULL, CL_PROGRAM_BUILD_LOG, sizeBuildLog, szBuildLog, NULL);
-		szBuildLog[sizeBuildLog] = '\0';
-
-		std::cout << "Build log:" << std::endl;
-		std::cout << szBuildLog << std::endl;
-
-		delete[] szBuildLog;
-
-		return true;
+		const auto name = clGetWrapperString(clGetDeviceInfo, d, CL_DEVICE_NAME);
+		for (char c : name)
+		{
+			id = id * 31 + c;
+		}
 	}
+
+	return id;
 }
 
-bool printResult(void *pNull, cl_int result)
+std::string getDeviceCacheFilename(cl_device_id &d, const size_t &inverseSize)
 {
-	if (result == CL_SUCCESS)
-	{
-		std::cout << "OK" << std::endl;
-		return false;
-	}
-	else
-	{
-		std::cout << "    error: " << result << std::endl;
-		return true;
-	}
-}
-
-std::string getDeviceCacheFilename(cl_device_id &deviceId, const size_t inverseSize)
-{
-
-	cl_device_type deviceType = clGetWrapper<cl_device_type>(clGetDeviceInfo, deviceId, CL_DEVICE_TYPE);
-	std::string strVendor = clGetWrapperString(clGetDeviceInfo, deviceId, CL_DEVICE_VENDOR);
-	std::string strName = clGetWrapperString(clGetDeviceInfo, deviceId, CL_DEVICE_NAME);
-	std::string strDriver = clGetWrapperString(clGetDeviceInfo, deviceId, CL_DRIVER_VERSION);
-
-	// Transform strVendor
-	std::transform(strVendor.begin(), strVendor.end(), strVendor.begin(), ::tolower);
-	strVendor.erase(std::remove_if(strVendor.begin(), strVendor.end(), [](char c)
-								   { return !::isalnum(c); }),
-					strVendor.end());
-
-	// Transform strName
-	std::transform(strName.begin(), strName.end(), strName.begin(), ::tolower);
-	strName.erase(std::remove_if(strName.begin(), strName.end(), [](char c)
-								 { return !::isalnum(c); }),
-				  strName.end());
-
-	// Transform strDriver
-	std::transform(strDriver.begin(), strDriver.end(), strDriver.begin(), ::tolower);
-	strDriver.erase(std::remove_if(strDriver.begin(), strDriver.end(), [](char c)
-								   { return !::isalnum(c); }),
-					strDriver.end());
-
-	std::ostringstream ssFilename;
-	ssFilename << "cache-opencl";
-	ssFilename << "-" << strVendor;
-	ssFilename << "-" << strName;
-	ssFilename << "-" << strDriver;
-	ssFilename << "-" << inverseSize;
-
-	return ssFilename.str();
+	const auto uniqueId = getUniqueDeviceIdentifier(d);
+	return "cache-opencl." + toString(inverseSize) + "." + toString(uniqueId);
 }
 
 int main(int argc, char **argv)
 {
 	try
 	{
-		ArgParser argParser(argc, argv);
+		ArgParser argp(argc, argv);
 
 		bool bHelp = false;
 		std::string matchingInput = "";
-		int prefixCount = 0;
-		int suffixCount = 0;
-		int quitCount = 0;
-
+		std::string outputFile = "";
+		std::string postUrl = "http://127.0.0.1:7002/api/address";
 		std::vector<size_t> vDeviceSkipIndex;
-		std::string strOutput = "";
-		std::string strPost = "";
-
+		size_t worksizeLocal = 64;
+		size_t worksizeMax = 0;
 		bool bNoCache = false;
+		size_t inverseSize = 255;
+		size_t inverseMultiple = 16384;
+		size_t prefixCount = 0;
+		size_t suffixCount = 6;
+		size_t quitCount = 0;
 
-		argParser.addSwitch('h', "help", bHelp);
-		argParser.addSwitch('m', "matching", matchingInput);
-		argParser.addSwitch('p', "prefix-count", prefixCount);
-		argParser.addSwitch('s', "suffix-count", suffixCount);
-		argParser.addSwitch('q', "quit-count", quitCount);
-		argParser.addMultiSwitch('k', "skip", vDeviceSkipIndex);
-		argParser.addSwitch('o', "output", strOutput);
-		argParser.addSwitch('t', "post", strPost);
-		argParser.addSwitch('n', "no-cache", bNoCache);
+		argp.addSwitch('h', "help", bHelp);
+		argp.addSwitch('m', "matching", matchingInput);
+		argp.addSwitch('w', "work", worksizeLocal);
+		argp.addSwitch('W', "work-max", worksizeMax);
+		argp.addSwitch('n', "no-cache", bNoCache);
+		argp.addSwitch('o', "output", outputFile);
+		argp.addSwitch('p', "post", postUrl);
+		argp.addSwitch('i', "inverse-size", inverseSize);
+		argp.addSwitch('I', "inverse-multiple", inverseMultiple);
+		argp.addSwitch('b', "prefix-count", prefixCount);
+		argp.addSwitch('e', "suffix-count", suffixCount);
+		argp.addSwitch('q', "quit-count", quitCount);
+		argp.addMultiSwitch('s', "skip", vDeviceSkipIndex);
 
-		if (!argParser.parse())
+		if (!argp.parse())
 		{
 			std::cout << "error: bad arguments, try again :<" << std::endl;
 			return 1;
@@ -264,20 +218,10 @@ int main(int argc, char **argv)
 			return 1;
 		}
 
-		if (prefixCount < 0)
-		{
-			prefixCount = 0;
-		}
-
 		if (prefixCount > 10)
 		{
 			std::cout << "error: the number of prefix matches cannot be greater than 10 :<" << std::endl;
 			return 1;
-		}
-
-		if (suffixCount < 0)
-		{
-			suffixCount = 6;
 		}
 
 		if (suffixCount > 10)
@@ -352,7 +296,7 @@ int main(int argc, char **argv)
 		std::cout << "OpenCL:" << std::endl;
 		std::cout << "  Context creating ..." << std::flush;
 		auto clContext = clCreateContext(NULL, vDevices.size(), vDevices.data(), NULL, NULL, &errorCode);
-		if (printResult(clContext, errorCode))
+		if (printResult(errorCode))
 		{
 			return 1;
 		}
@@ -373,7 +317,7 @@ int main(int argc, char **argv)
 			cl_int *pStatus = new cl_int[vDevices.size()];
 
 			clProgram = clCreateProgramWithBinary(clContext, vDevices.size(), vDevices.data(), vDeviceBinarySize.data(), pKernels, pStatus, &errorCode);
-			if (printResult(clProgram, errorCode))
+			if (printResult(errorCode))
 			{
 				return 1;
 			}
@@ -383,22 +327,17 @@ int main(int argc, char **argv)
 			// Create program from source
 			std::cout << "  Compiling OpenCL kernel..." << std::flush;
 
-			std::string strKernel = kernel_profanity + kernel_sha256 + kernel_keccak;
-
-			const char *szKernel = strKernel.c_str();
-			const size_t sizeKernel = strKernel.size();
-
-			clProgram = clCreateProgramWithSource(clContext, 1, &szKernel, &sizeKernel, &errorCode);
-			if (printResult(clProgram, errorCode))
+			const char *szKernels[] = {kernel_keccak.c_str(), kernel_sha256.c_str(), kernel_profanity.c_str()};
+			clProgram = clCreateProgramWithSource(clContext, sizeof(szKernels) / sizeof(char *), szKernels, NULL, &errorCode);
+			if (printResult(errorCode))
 			{
 				return 1;
 			}
 		}
 
 		std::cout << "  Building program..." << std::flush;
-		const std::string strCompileFlags = "-I.";
-		errorCode = clBuildProgram(clProgram, vDevices.size(), vDevices.data(), strCompileFlags.c_str(), NULL, NULL);
-		if (printResult(clProgram, errorCode))
+		const std::string strBuildOptions = "-D PROFANITY_INVERSE_SIZE=" + toString(inverseSize) + " -D PROFANITY_MAX_SCORE=" + toString(PROFANITY_MAX_SCORE);
+		if (printResult(clBuildProgram(clProgram, vDevices.size(), vDevices.data(), strBuildOptions.c_str(), NULL, NULL)))
 		{
 			return 1;
 		}
@@ -406,26 +345,26 @@ int main(int argc, char **argv)
 		// Save binary to cache if not loaded from cache
 		if (!bNoCache && !bUsedCache)
 		{
-			auto vBinaries = getBinaries(clProgram);
+			std::cout << "  Program saving ..." << std::flush;
+			auto binaries = getBinaries(clProgram);
 			for (size_t i = 0; i < vDevices.size(); ++i)
 			{
 				std::ofstream fileOut(getDeviceCacheFilename(vDevices[i], inverseSize), std::ios::binary);
-				if (fileOut.is_open())
-				{
-					fileOut.write(vBinaries[i].data(), vBinaries[i].size());
-				}
+				fileOut.write(binaries[i].data(), binaries[i].size());
 			}
+			std::cout << "Done" << std::endl;
 		}
 
 		std::cout << std::endl;
 
-		Dispatcher dispatcher(clContext, clProgram, mode, quitCount, strOutput, strPost);
-		for (auto &deviceId : vDevices)
+		Dispatcher d(clContext, clProgram, mode, worksizeMax == 0 ? inverseSize * inverseMultiple : worksizeMax, inverseSize, inverseMultiple, quitCount, outputFile, postUrl);
+
+		for (auto &i : vDevices)
 		{
-			dispatcher.addDevice(deviceId, mDeviceIndex[deviceId], worksizeLocal, worksizeMax);
+			d.addDevice(i, worksizeLocal, mDeviceIndex[i]);
 		}
 
-		dispatcher.run();
+		d.run();
 
 		clReleaseProgram(clProgram);
 		clReleaseContext(clContext);
