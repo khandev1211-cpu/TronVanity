@@ -8,3 +8,4 @@ __pycache__/
 venv/
 res_*.txt
 match_*.txt
+cache-opencl*
