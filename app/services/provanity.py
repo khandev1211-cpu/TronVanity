@@ -34,7 +34,7 @@ _PRIVKEY_RE = re.compile(r"private key:\s*(\S+)", re.IGNORECASE)
 def run_profanity_simultaneous(prefix: str = "", suffix: str = "") -> ProVanityResult:
     """
     Executes C++ OpenCL Profanity Engine with simultaneous Prefix and Suffix matching.
-    Includes --device 0 parameter to select primary RTX GPU and prevent OpenCL -33 context error.
+    Uses --skip parameter (valid flags: --matching, --prefix-count, --suffix-count, --quit-count, --skip, --output).
     """
     base58_pad = "123456789ABCDEFGHJKLMNPQRSTUV"
     pad_needed = 34 - 1 - len(prefix) - len(suffix)
@@ -52,7 +52,7 @@ def run_profanity_simultaneous(prefix: str = "", suffix: str = "") -> ProVanityR
         "--prefix-count", str(len(prefix)),
         "--suffix-count", str(len(suffix)),
         "--quit-count", "1",
-        "--device", "0",
+        "--skip", str(settings.gpu_skip),
         "--output", result_file
     ]
 
