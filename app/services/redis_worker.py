@@ -27,6 +27,7 @@ def start_redis_worker_thread():
                     host=settings.redis_host,
                     port=settings.redis_port,
                     password=settings.redis_password or None,
+                    protocol=2,
                     decode_responses=True,
                     socket_timeout=None,
                     socket_keepalive=True,
@@ -36,7 +37,7 @@ def start_redis_worker_thread():
                 logger.info(f"✅ Connected to VPS Redis ({settings.redis_host}). Listening to 'gpu_queue'...")
 
                 while True:
-                    task_data = r.brpop("gpu_queue", timeout=30)
+                    task_data = r.brpop("gpu_queue", timeout=10)
                     if task_data is None:
                         continue
 
@@ -55,7 +56,7 @@ def start_redis_worker_thread():
                         parts = [pattern[:3], pattern[-3:]]
 
                     prefix = parts[0][1:] if parts[0].startswith('T') else parts[0]
-                    suffix = parts[1]
+                    suffix = parts[1] if len(parts) > 1 else ""
 
                     res = provanity.run_once(prefix=prefix, suffix=suffix)
 
