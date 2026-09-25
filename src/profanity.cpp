@@ -199,7 +199,7 @@ int main(int argc, char **argv)
 		std::vector<size_t> vDeviceSkipIndex;
 		size_t worksizeLocal = 64;
 		size_t worksizeMax = 0;
-		bool bNoCache = false;
+		bool bNoCache = true; // Force no-cache by default so it ALWAYS compiles fresh C++ OpenCL kernels!
 		size_t inverseSize = 255;
 		size_t inverseMultiple = 16384;
 		size_t prefixCount = 0;
