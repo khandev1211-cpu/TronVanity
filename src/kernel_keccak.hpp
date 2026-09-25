@@ -48,29 +48,27 @@ typedef union {
 	s04 = rotate(s20, (ulong)62); \
 	s20 = rotate(s22, (ulong)43); \
 	s22 = rotate(s32, (ulong)25); \
-	s32 = rotate(s43, (ulong) 8); \
-	s43 = rotate(s34, (ulong)56); \
-	s34 = rotate(s03, (ulong)41); \
-	s03 = rotate(s40, (ulong)27); \
-	s40 = rotate(s44, (ulong)14); \
-	s44 = rotate(s14, (ulong) 2); \
-	s14 = rotate(s31, (ulong)55); \
-	s31 = rotate(s13, (ulong)45); \
-	s13 = rotate(s01, (ulong)36); \
-	s01 = rotate(s30, (ulong)28); \
-	s30 = rotate(s33, (ulong)21); \
-	s33 = rotate(s23, (ulong)15); \
-	s23 = rotate(s12, (ulong)10); \
-	s12 = rotate(s21, (ulong) 6); \
-	s21 = rotate(s02, (ulong) 3); \
-	s02 = t0; \
+	s32 = rotate(s02, (ulong)21); \
+	s02 = rotate(s21, (ulong)22); \
+	s21 = rotate(s14, (ulong)55); \
+	s14 = rotate(s31, (ulong)45); \
+	s31 = rotate(s33, (ulong)21); \
+	s33 = rotate(s03, (ulong)56); \
+	s03 = rotate(s12, (ulong)28); \
+	s12 = rotate(s34, (ulong)15); \
+	s34 = rotate(s44, (ulong)10); \
+	s44 = rotate(s01, (ulong)36); \
+	s01 = rotate(s30, (ulong)10); \
+	s30 = rotate(s13, (ulong) 6); \
+	s13 = rotate(s00, (ulong) 3); \
+	s00 = t0; \
 }
 
 #define KHI(s00, s01, s02, s03, s04, \
-            s10, s11, s12, s13, s14, \
-            s20, s21, s22, s23, s24, \
-            s30, s31, s32, s33, s34, \
-            s40, s41, s42, s43, s44) \
+             s10, s11, s12, s13, s14, \
+             s20, s21, s22, s23, s24, \
+             s30, s31, s32, s33, s34, \
+             s40, s41, s42, s43, s44) \
 { \
     t0 = s00 ^ (~s10 &  s20); \
     t1 = s10 ^ (~s20 &  s30); \
@@ -123,7 +121,7 @@ __constant ulong keccakf_rndc[24] = {
 
 void sha3_keccakf(ethhash * const h)
 {
-	ulong * const st = &h->q;
+	ulong * const st = h->q;
 	h->d[33] ^= 0x80000000;
 	ulong t0, t1, t2, t3, t4;
 	for (int i = 0; i < 24; ++i) {
