@@ -17,7 +17,7 @@ echo "[3/4] Building native OpenCL C++ binary (profanity.x64)..."
 chmod +x build.sh
 ./build.sh
 
-echo "[4/4] Configuring environment (.env)..."
+echo "[4/4] Configuring environment (.env) & permissions..."
 if [ ! -f .env ]; then
     cat << 'EOF' > .env
 REDIS_HOST=167.172.140.20
@@ -30,6 +30,8 @@ LOG_LEVEL=INFO
 EOF
     echo "[OK] Created default .env configured for Main VPS Redis (167.172.140.20)"
 fi
+
+chmod +x profanity.x64
 
 echo "=================================================="
 echo "✅ SETUP COMPLETE! Starting GPU Redis Worker..."
