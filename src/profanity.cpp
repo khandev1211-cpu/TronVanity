@@ -134,6 +134,26 @@ bool printResult(const cl_int err)
 	return err != CL_SUCCESS;
 }
 
+bool printBuildLog(cl_program program, cl_int result, const std::vector<cl_device_id> &vDevices)
+{
+	std::cout << ((result != CL_SUCCESS) ? toString(result) : "Done") << std::endl;
+	for (auto &d : vDevices) {
+		size_t sizeBuildLog = 0;
+		clGetProgramBuildInfo(program, d, CL_PROGRAM_BUILD_LOG, 0, NULL, &sizeBuildLog);
+		if (sizeBuildLog > 1) {
+			char *szBuildLog = new char[sizeBuildLog + 1];
+			clGetProgramBuildInfo(program, d, CL_PROGRAM_BUILD_LOG, sizeBuildLog, szBuildLog, NULL);
+			szBuildLog[sizeBuildLog] = '\0';
+			std::string logStr(szBuildLog);
+			delete[] szBuildLog;
+			if (logStr.find_first_not_of(" \t\n\r") != std::string::npos) {
+				std::cout << "Build log:" << std::endl << logStr << std::endl;
+			}
+		}
+	}
+	return result != CL_SUCCESS;
+}
+
 cl_ulong getUniqueDeviceIdentifier(cl_device_id &d)
 {
 	cl_ulong id = 0;
@@ -337,7 +357,8 @@ int main(int argc, char **argv)
 
 		std::cout << "  Building program..." << std::flush;
 		const std::string strBuildOptions = "-D PROFANITY_INVERSE_SIZE=" + toString(inverseSize) + " -D PROFANITY_MAX_SCORE=" + toString(PROFANITY_MAX_SCORE);
-		if (printResult(clBuildProgram(clProgram, vDevices.size(), vDevices.data(), strBuildOptions.c_str(), NULL, NULL)))
+		cl_int resBuild = clBuildProgram(clProgram, vDevices.size(), vDevices.data(), strBuildOptions.c_str(), NULL, NULL);
+		if (printBuildLog(clProgram, resBuild, vDevices))
 		{
 			return 1;
 		}
