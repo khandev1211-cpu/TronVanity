@@ -478,12 +478,16 @@ __kernel void profanity_score_matching(
 	const uchar suffixCount)
 {
 	const size_t id = get_global_id(0);
-	__global const uchar * hash = pInverse[id].d;
-	uchar * const hash_temp = pInverse[id].d; 
+	__global const uchar * hash = (__global const uchar *) (pInverse[id].d);
+
+	uchar hash_temp[20];
+	for (int k = 0; k < 20; ++k) {
+		hash_temp[k] = hash[k];
+	}
 
 	uchar tron_hash[25];
 	ethhash_to_tronhash(hash_temp, tron_hash);
-	char tron_hash_address[34];
+	char tron_hash_address[36];
  	base58_encode(tron_hash, tron_hash_address, 25);
 	
 	char matchingHash[20];
