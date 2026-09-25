@@ -151,7 +151,7 @@ void ethhash_to_tronhash(const uchar *ethhash, uchar *tronhash) {
 __constant char alphabet[] = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 void base58_encode(const uchar *input, char *output, const int input_len) {
-  __private uint digits[32] = {0};
+  __private uint digits[36] = {0};
   int digit_count = 1;
   for (int i = 0; i < input_len; i++) {
     uint carry = input[i];
@@ -166,20 +166,15 @@ void base58_encode(const uchar *input, char *output, const int input_len) {
     }
   }
 
-  int zero_count = 0;
-  while (zero_count < input_len && input[zero_count] == 0) {
-    zero_count++;
+  while (digit_count < 34) {
+    digits[digit_count++] = 0;
   }
+
   int output_idx = 0;
-  output[output_idx++] = alphabet[digits[digit_count - 1]];
-  for (int i = digit_count - 2; i >= 0; i--) {
-    if (zero_count > 0) {
-      zero_count--;
-    } else {
-      output[output_idx++] = alphabet[digits[i]];
-    }
+  for (int i = 33; i >= 0; i--) {
+    output[output_idx++] = alphabet[digits[i]];
   }
-  output[output_idx] = '\0';
+  output[34] = '\0';
 }
 )";
 
