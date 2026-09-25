@@ -21,7 +21,7 @@ Mode Mode::matching(std::string matchingInput) {
 	Mode r;
 	std::vector<std::string> matchingList;
 
-	if(matchingInput.size() == 34 && matchingInput[0] == 'T') {
+	if(matchingInput.size() == 34 && (matchingInput[0] == 'T' || matchingInput[0] == 't')) {
 		std::stringstream ss;
 		matchingInput.erase(10, 14);
 		for (const char &item: matchingInput) {
@@ -45,7 +45,11 @@ Mode Mode::matching(std::string matchingInput) {
 				}
 			}
 		} else {
-			std::cout << "error: Failed to open matching file. :<" << std::endl;
+			if (matchingInput.size() != 34 && (matchingInput[0] == 'T' || matchingInput[0] == 't')) {
+				std::cout << "error: Target template string must be EXACTLY 34 characters long! (Current length: " << matchingInput.size() << ")" << std::endl;
+			} else {
+				std::cout << "error: Failed to open matching file. :<" << std::endl;
+			}
 		}
 	}
 	
