@@ -1,39 +1,38 @@
 #!/usr/bin/env bash
-# Starts the server in the background, validating config first.
-set -euo pipefail
+# TronVanity Automated Setup & Worker Launcher Script for Vast.ai / Linux GPU Instances
+set -e
 
-cd "$(dirname "$0")"
+echo "=================================================="
+echo "🚀 TronVanity GPU Node Setup & Worker Launcher"
+echo "=================================================="
 
+echo "[1/4] Pulling latest code from GitHub..."
+git reset --hard
+git pull origin main
+
+echo "[2/4] Installing Python requirements..."
+pip install -q -r requirements.txt || pip install -q fastapi uvicorn redis pydantic requests python-dotenv
+
+echo "[3/4] Building native OpenCL C++ binary (profanity.x64)..."
+chmod +x build.sh
+./build.sh
+
+echo "[4/4] Configuring environment (.env)..."
 if [ ! -f .env ]; then
-    echo "ERROR: .env not found."
-    echo "Run: cp .env.example .env   then edit it and set VANITY_API_KEY."
-    exit 1
+    cat << 'EOF' > .env
+REDIS_HOST=167.172.140.20
+REDIS_PORT=6379
+REDIS_PASSWORD=
+PROFANITY_BINARY=/workspace/TronVanity/profanity.x64
+HOST=0.0.0.0
+PORT=8000
+LOG_LEVEL=INFO
+EOF
+    echo "[OK] Created default .env configured for Main VPS Redis (167.172.140.20)"
 fi
 
-if [ -f server.pid ] && kill -0 "$(cat server.pid)" 2>/dev/null; then
-    echo "Server already running (PID $(cat server.pid)). Run ./stop.sh first if you want to restart."
-    exit 1
-fi
+echo "=================================================="
+echo "✅ SETUP COMPLETE! Starting GPU Redis Worker..."
+echo "=================================================="
 
-echo "Validating configuration and starting server..."
-nohup python3 run.py > /dev/null 2>&1 &
-PID=$!
-echo $PID > server.pid
-
-# Give it a moment to either come up or crash on config validation
-sleep 2
-
-if ! kill -0 "$PID" 2>/dev/null; then
-    echo ""
-    echo "ERROR: server failed to start. Check logs/server.log for details."
-    rm -f server.pid
-    exit 1
-fi
-
-echo "Server started (PID $PID)."
-echo "Logs: tail -f $(pwd)/logs/server.log"
-echo ""
-echo "Checking health endpoint..."
-sleep 1
-PORT=$(grep -E '^PORT=' .env | cut -d= -f2 || echo 8000)
-curl -sf "http://localhost:${PORT}/health" && echo "" || echo "(health check did not respond yet — check logs)"
+python3 run.py
