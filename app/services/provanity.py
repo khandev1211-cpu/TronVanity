@@ -36,9 +36,8 @@ def run_profanity_simultaneous(prefix: str = "", suffix: str = "") -> ProVanityR
     Executes C++ OpenCL Profanity Engine with simultaneous Prefix and Suffix matching.
     Uses -b for prefix-count, -e for suffix-count, -q for quit-count, and -o for output file.
     """
-    base58_pad = "123456789ABCDEFGHJKLMNPQRSTUV"
     pad_needed = 34 - 1 - len(prefix) - len(suffix)
-    dummy_fill = base58_pad[:max(0, pad_needed)]
+    dummy_fill = "1" * max(0, pad_needed)
     target_address = f"T{prefix}{dummy_fill}{suffix}"
 
     result_file = f"res_{int(time.time())}.txt"
