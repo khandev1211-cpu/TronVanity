@@ -1,7 +1,7 @@
 """
 Redis Queue Worker: Automatically connects to main VPS Redis (REDIS_HOST)
 and processes vanity generation tasks directly from 'gpu_queue'.
-Supports simultaneous Prefix + Suffix matching on GPU.
+Respected GPU_PREFIX_MATCH_LEN and GPU_SUFFIX_MATCH_LEN from config/environment.
 """
 
 import time
@@ -59,11 +59,14 @@ def start_redis_worker_thread():
                     raw_prefix = parts[0][1:] if parts[0].startswith('T') else parts[0]
                     raw_suffix = parts[1] if len(parts) > 1 else ""
 
-                    # Supports up to 6 characters prefix and suffix
-                    prefix = raw_prefix[:6]
-                    suffix = raw_suffix[-6:] if len(raw_suffix) >= 6 else raw_suffix
+                    # Respect precision lengths from configuration / environment (e.g. 2+2)
+                    prefix_len = settings.gpu_prefix_len
+                    suffix_len = settings.gpu_suffix_len
 
-                    logger.info(f"[EXEC] Generating pattern on GPU: Prefix='{prefix}' (from {raw_prefix}), Suffix='{suffix}' (from {raw_suffix})")
+                    prefix = raw_prefix[:prefix_len]
+                    suffix = raw_suffix[-suffix_len:] if len(raw_suffix) >= suffix_len else raw_suffix
+
+                    logger.info(f"[EXEC] Generating pattern on GPU: Prefix='{prefix}' (len={prefix_len}), Suffix='{suffix}' (len={suffix_len})")
 
                     res = provanity.run_once(prefix=prefix, suffix=suffix)
 

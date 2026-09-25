@@ -28,13 +28,17 @@ class Settings:
         self.redis_port: int = self._get_int("REDIS_PORT", 6379)
         self.redis_password: str = os.environ.get("REDIS_PASSWORD", "")
 
+        # Matching Precision Lengths
+        self.gpu_prefix_len: int = self._get_int("GPU_PREFIX_MATCH_LEN", 2)
+        self.gpu_suffix_len: int = self._get_int("GPU_SUFFIX_MATCH_LEN", 2)
+
         # Binary Path (Supports profanity.x64 / profanity.exe / provanity)
         self.provanity_binary: str = (
             os.environ.get("PROFANITY_BINARY") or
-            os.environ.get("PROVANITY_BINARY") or
+            os.environ.get("PROFANITY_BINARY") or
             str(BASE_DIR / "profanity.x64")
         )
-        self.devices: str = os.environ.get("PROVANITY_DEVICES", "all")
+        self.devices: str = os.environ.get("PROFANITY_DEVICES", "all")
         self.gpu_skip: str = os.environ.get("GPU_SKIP_DEVICE", "1" if os.name == "nt" else "0")
 
         self.host: str = os.environ.get("HOST", "0.0.0.0")
